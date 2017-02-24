@@ -53,10 +53,10 @@
 
 ;; shape generation stuff
 
-(declare circle-with-augmentations)
+(declare circle-with-decorations)
 
 (defn gen-concentric-circle [circle]
-  (circle-with-augmentations
+  (circle-with-decorations
     {:type :circle
      :center (:center circle)
      :radius (rand-between (* (:radius circle) (/ 1 4)) (* (:radius circle) (/ 3 4)))
@@ -72,8 +72,8 @@
         intersect-angle-a (+ midpoint-angle-from-center angle-offset)
         intersect-angle-b (- midpoint-angle-from-center angle-offset)]
     {:type :line
-     :point-a (displace (:center outer-circle) intersect-angle-a outer-r)
-     :point-b (displace (:center outer-circle) intersect-angle-b outer-r)}))
+     :p1 (displace (:center outer-circle) intersect-angle-a outer-r)
+     :p2 (displace (:center outer-circle) intersect-angle-b outer-r)}))
 
 (defn gen-inscribed-circle [circle]
   (let [{outer-center :center, outer-r :radius} circle
@@ -84,7 +84,7 @@
                       :center inner-center
                       :radius inner-r
                       :base-angle angle}]
-    (cond-> (circle-with-augmentations inner-circle)
+    (cond-> (circle-with-decorations inner-circle)
             (> (rand) 0.5)
             (conj (gen-chord circle inner-circle)))))
 
@@ -92,7 +92,7 @@
   (let [[point-a point-b] (take 2 (:points polygon))
         mid (midpoint point-a point-b)
         radius (distance (:center polygon) mid)]
-    (circle-with-augmentations
+    (circle-with-decorations
       {:type :circle
        :center (:center polygon)
        :radius radius
@@ -112,31 +112,57 @@
 
 (defn gen-line-thru-center-for-circle [circle]
   [{:type :line
-    :point-a (point-at-angle circle (:base-angle circle))
-    :point-b (point-at-angle circle (+ (:base-angle circle) 180))}])
+    :p1 (point-at-angle circle (:base-angle circle))
+    :p2 (point-at-angle circle (+ (:base-angle circle) 180))}])
 
-(defn circle-with-augmentations [circle]
-  (let [gen-f (rand-nth [gen-concentric-circle
-                         gen-inscribed-circle
-                         gen-inscribed-polygon
-                         gen-line-thru-center-for-circle
-                         (constantly [])])]
-    (into [circle] (gen-f circle))))
+(defn circle-with-decorations
+  ([circle]
+    (circle-with-decorations circle
+      [gen-concentric-circle
+       gen-inscribed-circle
+       gen-inscribed-polygon
+       gen-line-thru-center-for-circle
+       (constantly [])]))
+  ([circle decorators]
+    (into [circle] ((rand-nth decorators) circle))))
+
+(defn gen-branches [root]
+  (let [num-branches (rand-nth [2 3 3 4 4 5 6])
+        branch-angles (rotations (:base-angle root) num-branches)
+        branch-line-length 20 ;; TODO randomize this?
+        root-r (:radius root)
+        branch-r (rand-between (* root-r (/ 1 4)) (* root-r (/ 3 4)))]
+    (->> branch-angles
+         (mapv (fn [angle]
+                 (let [p1 (point-at-angle root angle)
+                       p2 (displace p1 angle branch-line-length)
+                       line {:type :line :p1 p1 :p2 p2}
+                       circle {:type :circle
+                               :center (displace p2 angle branch-r)
+                               :radius branch-r
+                               :base-angle angle}]
+                   (into [line circle] (circle-with-decorations circle)))))
+         (reduce into))))
+
+(defn gen-root []
+  (circle-with-decorations
+    {:type :circle
+     :center {:x 0 :y 0}
+     :radius 60
+     :base-angle (rand-nth [0 0 90 180 180 270])}
+    [gen-concentric-circle
+     gen-inscribed-circle
+     gen-inscribed-polygon]))
 
 (defn gen-box []
-  (let [circle {:type :circle
-                :center {:x 0 :y 0}
-                :radius 75
-                :base-angle (rand-nth [0 0 90 180 180 270])}
-        gen-f (rand-nth [gen-concentric-circle
-                         gen-inscribed-circle
-                         gen-inscribed-polygon])]
-    (into [circle] (gen-f circle))))
+  (let [root (gen-root)
+        branches (gen-branches (first root))]
+    (into root branches)))
 
 ;; rendering stuff
 
 (defonce app-state
-  (atom {:boxes (vec (repeatedly 21 gen-box))}))
+  (atom {:boxes (vec (repeatedly 24 gen-box))}))
 
 (defcomponent graphic-view [data owner]
   (render [_]
@@ -154,20 +180,20 @@
                       :stroke "green"
                       :stroke-width 1})
       :line
-        (dom/line {:x1 (:x (:point-a data))
-                   :y1 (:y (:point-a data))
-                   :x2 (:x (:point-b data))
-                   :y2 (:y (:point-b data))
+        (dom/line {:x1 (:x (:p1 data))
+                   :y1 (:y (:p1 data))
+                   :x2 (:x (:p2 data))
+                   :y2 (:y (:p2 data))
                    :stroke "green"
                    :stroke-width 1}))))
 
 (defcomponent box-view [data owner]
   (render [_]
     (prn data)
-    (dom/svg {:viewBox "0 0 200 200"
+    (dom/svg {:viewBox "0 0 360 360"
               :preserveAspectRatio "xMidYMid meet"
-              :width 200 :height 200}
-      (dom/g {:transform "translate(100 100)"}
+              :width 360 :height 360}
+      (dom/g {:transform "translate(180 180)"}
         (om/build-all graphic-view data)))))
 
 (defcomponent app [data owner]
