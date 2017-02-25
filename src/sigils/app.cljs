@@ -110,6 +110,17 @@
             (> (rand) 0.5)
             (into (gen-inscribed-circle-for-polygon polygon)))))
 
+(defn gen-interior-ring [outer]
+  (let [inner (update outer :radius #(rand-between (* % (/ 5 6)) (* % (/ 7 8))))
+        num-lines (rand-nth [2 2 3 3 3 4 4 4 5 5 5 6 6 6 7 8 9 10 11 12 12])
+        line-angles (rotations (:base-angle outer) num-lines)]
+    (->> line-angles
+         (mapv (fn [angle]
+                  {:type :line
+                   :p1 (point-at-angle inner angle)
+                   :p2 (point-at-angle outer angle)}))
+         (into (circle-with-decorations inner)))))
+
 (defn gen-line-thru-center-for-circle [circle]
   [{:type :line
     :p1 (point-at-angle circle (:base-angle circle))
@@ -121,6 +132,7 @@
       [gen-concentric-circle
        gen-inscribed-circle
        gen-inscribed-polygon
+       gen-interior-ring
        gen-line-thru-center-for-circle
        (constantly [])]))
   ([circle decorators]
@@ -129,7 +141,7 @@
 (defn gen-branches [root]
   (let [num-branches (rand-nth [2 3 3 4 4 5 6])
         branch-angles (rotations (:base-angle root) num-branches)
-        branch-line-length 20 ;; TODO randomize this?
+        branch-line-length (+ 10 (rand-int 10))
         root-r (:radius root)
         branch-r (rand-between (* root-r (/ 1 4)) (* root-r (/ 3 4)))]
     (->> branch-angles
@@ -149,10 +161,11 @@
     {:type :circle
      :center {:x 0 :y 0}
      :radius 60
-     :base-angle (rand-nth [0 0 90 180 180 270])}
+     :base-angle (rand-nth [0 0 0 90 90 180 180 180 270 270 45 135 225 315])}
     [gen-concentric-circle
      gen-inscribed-circle
-     gen-inscribed-polygon]))
+     gen-inscribed-polygon
+     gen-interior-ring]))
 
 (defn gen-box []
   (let [root (gen-root)
